@@ -13,6 +13,8 @@ Nothing here changes the main project. `src/` is read and rewritten during the b
 | `tools/router.js` | Hash routing (`index.svg#/games`), used in place of `src/lib/router.js` |
 | `tools/gateway.js` | Runs next to your server and lets CDN pages call it |
 | `site/` | Generated output. This is what the CDN serves |
+| `tools/serve.js` | Serves the build on your machine the way jsDelivr would |
+| `links.txt` | 1000 jsDelivr links to the page |
 
 ## Build
 
@@ -36,13 +38,15 @@ The gateway must be reachable over HTTPS, because an HTTPS page can't call plain
 
 ## Deploy
 
-Commit `svg/site`, push, then open:
+The contents of `svg/site`, plus `tools/`, this README and the license, go at the root of [blackwaves-services/svg](https://github.com/blackwaves-services/svg). `tools/` only runs from inside the main blackwaves project.
 
 ```
-https://cdn.jsdelivr.net/gh/<user>/<repo>@<branch or commit>/svg/site/index.svg
+https://cdn.jsdelivr.net/gh/blackwaves-services/svg@main/index.svg
 ```
 
-jsDelivr caches branch URLs for up to 12 hours, so link to a commit or tag to see a change straight away.
+jsDelivr caches branch URLs for up to 12 hours, so link to a commit to see a change straight away.
+
+`links.txt` has 1000 links to this page. Links with `@main` or no version follow the newest push; links with a commit hash stay on that commit.
 
 ## Limits
 
