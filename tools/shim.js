@@ -61,6 +61,8 @@
   window.__BW_BASE__ = location.href.split(/[?#]/)[0].replace(/[^/]*$/, "");
   window.__BW_API__ = config.api;
   window.__BW_WS__ = (config.api || location.origin).replace(/^http/, "ws");
+  window.__BW_WISP__ = config.wisp || window.__BW_WS__ + "/wisp/";
+  window.__BW_BARE__ = config.bare || new URL("/bare/", location.href).href;
 
   // the server's json has links like "/api/manga/img?...", which would point at the cdn
   function absoluteLinks(response) {
@@ -87,7 +89,9 @@
       );
     }
     return realFetch(input, init).then(function (response) {
-      return config.api && String(url).indexOf(config.api) === 0 ? absoluteLinks(response) : response;
+      // bare carries other sites' pages, which must arrive untouched
+      var ours = config.api && String(url).indexOf(config.api) === 0 && String(url).indexOf(window.__BW_BARE__) !== 0;
+      return ours ? absoluteLinks(response) : response;
     });
   };
 })();
