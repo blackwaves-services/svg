@@ -1,5 +1,7 @@
 // builds blackwaves into svg/site: an index.svg plus plain files a cdn can serve.
 //   node svg/tools/build.js --api https://your-gateway
+// optional: --bare <bare server url> --wisp <wisp url> --transport <default transport>
+// transports: libcurl, epoxy, bare, libcurl-bare, epoxy-bare
 // src/ isn't touched. its paths and page routing get rewritten here, during the build.
 import fs from "node:fs";
 import path from "node:path";
@@ -14,9 +16,19 @@ const site = path.join(svgDir, "site");
 const modules = path.join(project, "node_modules", "@mercuryworkshop");
 const pkg = JSON.parse(fs.readFileSync(path.join(project, "package.json"), "utf8"));
 
-const flag = process.argv.indexOf("--api");
-const api = (flag > 0 ? process.argv[flag + 1] : process.env.BW_SVG_API || "").replace(/\/+$/, "");
+const option = (name) => {
+  const flag = process.argv.indexOf(`--${name}`);
+  return flag > 0 ? process.argv[flag + 1] : "";
+};
+const api = (option("api") || process.env.BW_SVG_API || "").replace(/\/+$/, "");
 if (api && !/^https?:\/\//.test(api)) throw new Error("--api needs a full url, like https://your-gateway");
+// the gateway hosts all of these, so they follow --api unless they live somewhere else
+const bare = option("bare") || (api ? `${api}/bare/` : "");
+const wisp = option("wisp") || (api ? `${api.replace(/^http/, "ws")}/wisp/` : "");
+const transport = option("transport") || "libcurl";
+if (!["libcurl", "epoxy", "bare", "libcurl-bare", "epoxy-bare"].includes(transport)) throw new Error(`unknown transport ${transport}`);
+if (bare && !/^https?:\/\/.*\/$/.test(bare)) throw new Error("--bare needs a full url ending in /");
+if (wisp && !/^wss?:\/\//.test(wisp)) throw new Error("--wisp needs a ws:// or wss:// url");
 if (!api) console.warn("no --api given: pages that need the server (movies, music, manga, ai, proxy) won't load");
 
 const prefix = (quote, global, rest) => (quote === "`" ? "`${window." + global + "}" + rest : `window.${global}+${quote}${rest}`);
@@ -26,7 +38,21 @@ const prefix = (quote, global, rest) => (quote === "`" ? "`${window." + global +
 const PATCHES = [
   ["src/lib/api.js", "SHAREABLE.test(path)", 'SHAREABLE.test(path.replace(window.__BW_API__, ""))'],
   ["src/lib/proxy.js", /const PREFIX = "\/~\/sj\/"/, 'const PREFIX = new URL(window.__BW_BASE__).pathname + "~/sj/"'],
-  ["src/lib/proxy.js", /`\$\{location\.protocol === "https:" \? "wss" : "ws"\}:\/\/\$\{location\.host\}\/wisp\/`/, 'window.__BW_WS__ + "/wisp/"'],
+  ["src/lib/proxy.js", /`\$\{location\.protocol === "https:" \? "wss" : "ws"\}:\/\/\$\{location\.host\}\/wisp\/`/, "window.__BW_WISP__"],
+  [
+    "src/lib/proxy.js",
+    /const path = name === "libcurl" \? (.+?) : (.+?);/,
+    `const viaBare = await import(/* @vite-ignore */ window.__BW_BASE__ + "bare/transport.mjs");
+  viaBare.tunnelWisp(name.endsWith("-bare") ? wispUrl() : null);
+  const engine = name.replace("-bare", "");
+  const path = engine === "bare" ? window.__BW_BASE__ + "bare/transport.mjs" : engine === "libcurl" ? $1 : $2;`,
+  ],
+  ["src/lib/settings.js", 'transport: "libcurl"', 'transport: window.__BW_CONFIG__.transport'],
+  [
+    "src/components/Settings.jsx",
+    /\{\s*id: "libcurl",\s*name: "libcurl \(default\)"\s*\}/,
+    '{ id: "libcurl", name: "libcurl" }, { id: "bare", name: "bare" }, { id: "libcurl-bare", name: "libcurl through bare" }, { id: "epoxy-bare", name: "epoxy through bare" }',
+  ],
   ["src/lib/proxy.js", /scope: "\/"/, "scope: window.__BW_BASE__"],
   ["src/lib/realtime.js", /`\$\{location\.protocol === "https:" \? "wss" : "ws"\}:\/\/\$\{location\.host\}\/api\/ws`/, 'window.__BW_WS__ + "/api/ws"'],
   ["src/lib/cloak.js", 'location.origin + "/"', 'location.href.split("#")[0]'],
@@ -137,7 +163,7 @@ const BOOT = `import(${JSON.stringify(entry)}).catch(function (error) {
 });`;
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"><title>blackwaves</title><foreignObject width="100%" height="100%"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head>
-<script>//${cdata(`\nwindow.__BW_CONFIG__ = ${JSON.stringify({ api })};\n${fs.readFileSync(path.join(tools, "shim.js"), "utf8")}//`)}</script>
+<script>//${cdata(`\nwindow.__BW_CONFIG__ = ${JSON.stringify({ api, bare, wisp, transport })};\n${fs.readFileSync(path.join(tools, "shim.js"), "utf8")}//`)}</script>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="color-scheme" content="dark" />
@@ -169,6 +195,8 @@ copy(path.join(modules, "scramjet", "dist", "scramjet.wasm"), "scram/scramjet.wa
 for (const file of ["controller.api.js", "controller.inject.js", "controller.sw.js"]) copy(path.join(modules, "scramjet-controller", "dist", file), `ctrl/${file}`);
 copy(path.join(modules, "epoxy-transport", "dist", "index.mjs"), "epoxy/index.mjs");
 copy(path.join(modules, "libcurl-transport", "dist", "index.mjs"), "libcurl/index.mjs");
+copy(path.join(svgDir, "node_modules", "@mercuryworkshop", "bare-as-module3", "dist", "index.mjs"), "bare/client.mjs");
+copy(path.join(tools, "bare-transport.js"), "bare/transport.mjs");
 
 // same fix server/index.js applies when it serves this file
 const FIND = "s=(0,n.Qf)(t.args[2]);";
@@ -187,4 +215,4 @@ for (const entryFile of fs.readdirSync(site, { recursive: true, withFileTypes: t
   bytes += fs.statSync(path.join(entryFile.parentPath, entryFile.name)).size;
   count++;
 }
-console.log(`svg/site: ${count} files, ${(bytes / 1024 / 1024).toFixed(1)} MB, api: ${api || "none"}`);
+console.log(`svg/site: ${count} files, ${(bytes / 1024 / 1024).toFixed(1)} MB, api: ${api || "none"}, bare: ${bare || "none"}, transport: ${transport}`);
