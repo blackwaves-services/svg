@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"><title>blackwaves</title><foreignObject width="100%" height="100%"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head>
 <script>//<![CDATA[
-window.__BW_CONFIG__ = {"api":""};
+window.__BW_CONFIG__ = {"api":"","bare":"","wisp":"","transport":"libcurl"};
 // runs first inside index.svg. the browser treats the file as an svg document,
 // so document.body is null, createElement makes elements with no namespace and
 // tag names are lowercase. this makes it look like the html page the app expects.
@@ -64,6 +64,8 @@ window.__BW_CONFIG__ = {"api":""};
   window.__BW_BASE__ = location.href.split(/[?#]/)[0].replace(/[^/]*$/, "");
   window.__BW_API__ = config.api;
   window.__BW_WS__ = (config.api || location.origin).replace(/^http/, "ws");
+  window.__BW_WISP__ = config.wisp || window.__BW_WS__ + "/wisp/";
+  window.__BW_BARE__ = config.bare || new URL("/bare/", location.href).href;
 
   // the server's json has links like "/api/manga/img?...", which would point at the cdn
   function absoluteLinks(response) {
@@ -90,7 +92,9 @@ window.__BW_CONFIG__ = {"api":""};
       );
     }
     return realFetch(input, init).then(function (response) {
-      return config.api && String(url).indexOf(config.api) === 0 ? absoluteLinks(response) : response;
+      // bare carries other sites' pages, which must arrive untouched
+      var ours = config.api && String(url).indexOf(config.api) === 0 && String(url).indexOf(window.__BW_BARE__) !== 0;
+      return ours ? absoluteLinks(response) : response;
     });
   };
 })();
@@ -106,7 +110,7 @@ window.__BW_CONFIG__ = {"api":""};
 <link rel="modulepreload" crossorigin="anonymous" href="./_bw/rolldown-runtime-DK3Fl9T5.js" />
 <link rel="modulepreload" crossorigin="anonymous" href="./_bw/preact-mQyQhebN.js" />
 <link rel="modulepreload" crossorigin="anonymous" href="./_bw/storage-_vUKmX9E.js" />
-<link rel="modulepreload" crossorigin="anonymous" href="./_bw/settings-BoUM0N1P.js" />
+<link rel="modulepreload" crossorigin="anonymous" href="./_bw/settings-pA6WIuMu.js" />
 <link rel="modulepreload" crossorigin="anonymous" href="./_bw/notify-CxZwXsPl.js" />
 <link rel="modulepreload" crossorigin="anonymous" href="./_bw/api-PD3iJrmq.js" />
 <link rel="modulepreload" crossorigin="anonymous" href="./_bw/preload-helper-CRzLMJPS.js" />
@@ -121,7 +125,7 @@ foreignObject { overflow: visible; }
 @keyframes boot { 50% { transform: translateY(-6px); opacity: .5; } }
 ]]></style>
 </head><body><div id="boot"><img src="./favicon.ico" alt="" /></div><div id="app"></div><script>//<![CDATA[
-import("./_bw/index-Drd-Ydlm.js").catch(function (error) {
+import("./_bw/index-Buqooo7u.js").catch(function (error) {
   console.error(error);
   document.getElementById("boot").textContent = "blackwaves couldn't load. reload to try again.";
 });
