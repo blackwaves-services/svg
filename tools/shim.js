@@ -1,0 +1,93 @@
+// runs first inside index.svg. the browser treats the file as an svg document,
+// so document.body is null, createElement makes elements with no namespace and
+// tag names are lowercase. this makes it look like the html page the app expects.
+(function () {
+  var NS = "http://www.w3.org/1999/xhtml";
+  var root = document.getElementsByTagNameNS(NS, "html")[0];
+  var first = function (name) {
+    return root.getElementsByTagNameNS(NS, name)[0] || null;
+  };
+  var getter = function (name, get) {
+    Object.defineProperty(document, name, { configurable: true, get: get });
+  };
+  getter("documentElement", function () {
+    return root;
+  });
+  getter("head", function () {
+    return first("head");
+  });
+  getter("body", function () {
+    return first("body");
+  });
+  getter("scrollingElement", function () {
+    return first("body");
+  });
+
+  var createNS = document.createElementNS.bind(document);
+  document.createElement = function (name, options) {
+    return createNS(NS, String(name).toLowerCase(), options);
+  };
+
+  // app code checks things like tagName === "INPUT"
+  var tagName = Object.getOwnPropertyDescriptor(Element.prototype, "tagName");
+  Object.defineProperty(Element.prototype, "tagName", {
+    configurable: true,
+    get: function () {
+      var value = tagName.get.call(this);
+      return this.namespaceURI === NS ? value.toUpperCase() : value;
+    },
+  });
+
+  // the body scrolls here, because the svg root can't scroll its foreignObject
+  var scrollTo = window.scrollTo.bind(window);
+  window.scrollTo = function () {
+    var body = first("body");
+    return body ? body.scrollTo.apply(body, arguments) : scrollTo.apply(window, arguments);
+  };
+
+  // pages live in the hash: a cdn only has real files, so /games would be a 404
+  ["pushState", "replaceState"].forEach(function (key) {
+    var original = history[key].bind(history);
+    history[key] = function (state, title, url) {
+      return original(state, title, typeof url === "string" && url.charAt(0) === "/" ? "#" + url : url);
+    };
+  });
+  window.__BW_SEARCH__ = function () {
+    var at = location.hash.indexOf("?");
+    return at < 0 ? "" : location.hash.slice(at);
+  };
+
+  var config = window.__BW_CONFIG__;
+  window.__BW_BASE__ = location.href.split(/[?#]/)[0].replace(/[^/]*$/, "");
+  window.__BW_API__ = config.api;
+  window.__BW_WS__ = (config.api || location.origin).replace(/^http/, "ws");
+
+  // the server's json has links like "/api/manga/img?...", which would point at the cdn
+  function absoluteLinks(response) {
+    if (!/json/.test(response.headers.get("content-type") || "")) return response;
+    return response.text().then(function (text) {
+      return new Response(text.replace(/"\/(api\/|!!\/|!cover!\/|assets\/decor\/)/g, '"' + config.api + "/$1"), {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      });
+    });
+  }
+
+  // every site on a cdn shares one origin, so sign-in stays off here. see svg/README.md
+  var realFetch = window.fetch.bind(window);
+  window.fetch = function (input, init) {
+    var url = typeof input === "string" ? input : input && input.url;
+    if (/\/api\/auth\/(login|register)$/.test(String(url))) {
+      return Promise.resolve(
+        new Response(JSON.stringify({ error: "accounts are turned off on this mirror, sign in on the main site" }), {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    }
+    return realFetch(input, init).then(function (response) {
+      return config.api && String(url).indexOf(config.api) === 0 ? absoluteLinks(response) : response;
+    });
+  };
+})();
