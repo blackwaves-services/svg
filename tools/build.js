@@ -48,6 +48,11 @@ const PATCHES = [
   const path = engine === "bare" ? window.__BW_BASE__ + "bare/transport.mjs" : engine === "libcurl" ? $1 : $2;`,
   ],
   ["src/lib/settings.js", 'transport: "libcurl"', 'transport: window.__BW_CONFIG__.transport'],
+  // no server to keep a realtime connection to
+  ["src/lib/realtime.js", /(export function connect\(\) \{\s*wanted = true;)/, "$1\n  if (!window.__BW_CONFIG__.api) return;"],
+  // without a server, covers and site icons load straight from where they live
+  ["src/lib/gameurl.js", /url \? (`\$\{window\.__BW_API__\}\/!cover!\/.*?`) : ""/, 'url ? (window.__BW_API__ ? $1 : url) : ""'],
+  ["src/lib/games/sources.js", /url \? (`\$\{window\.__BW_API__\}\/!cover!\/.*?`) : ""/, 'url ? (window.__BW_API__ ? $1 : url) : ""'],
   [
     "src/components/Settings.jsx",
     /\{\s*id: "libcurl",\s*name: "libcurl \(default\)"\s*\}/,
@@ -67,7 +72,8 @@ function rewrite(code, id) {
   if (!/^(src|shared)\/.*\.jsx?$/.test(file)) return null;
   let out = code;
   // things only the server has
-  out = out.replace(/(["'`])\/(api\/|assets\/decor\/)/g, (_, quote, rest) => prefix(quote, "__BW_API__", `/${rest}`));
+  out = out.replace(/(["'`])\/api\//g, (_, quote) => prefix(quote, "__BW_API__", "/api/"));
+  out = out.replace(/(["'`])\/assets\/decor\//g, (_, quote) => prefix(quote, "__BW_DECOR__", "/assets/decor/"));
   out = out.replace(/`\/(!!\/|!cover!\/)/g, (_, rest) => prefix("`", "__BW_API__", `/${rest}`));
   // things copied next to index.svg
   out = out.replace(/(["'`])\/(favicon\.ico|assets\/(?:cursors|partners|img)\/|scram\/|ctrl\/|epoxy\/|libcurl\/|sw\.js)/g, (_, quote, rest) =>
@@ -191,6 +197,10 @@ copy(path.join(project, "favicon.ico"), "favicon.ico");
 copy(path.join(project, "assets", "cursors"), "assets/cursors");
 copy(path.join(project, "assets", "partners"), "assets/partners");
 copy(path.join(project, "assets", "images"), "assets/img");
+// the shop's pictures only. the animated versions stay on the server, they're 40 mb
+for (const name of fs.readdirSync(path.join(project, "assets", "decor"))) {
+  if (name.endsWith(".png")) copy(path.join(project, "assets", "decor", name), `assets/decor/${name}`);
+}
 copy(path.join(modules, "scramjet", "dist", "scramjet.wasm"), "scram/scramjet.wasm");
 for (const file of ["controller.api.js", "controller.inject.js", "controller.sw.js"]) copy(path.join(modules, "scramjet-controller", "dist", file), `ctrl/${file}`);
 copy(path.join(modules, "epoxy-transport", "dist", "index.mjs"), "epoxy/index.mjs");
