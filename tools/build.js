@@ -197,7 +197,7 @@ copy(path.join(project, "favicon.ico"), "favicon.ico");
 copy(path.join(project, "assets", "cursors"), "assets/cursors");
 copy(path.join(project, "assets", "partners"), "assets/partners");
 copy(path.join(project, "assets", "images"), "assets/img");
-// the shop's pictures only. the animated versions stay on the server, they're 40 mb
+// the shop's still pictures only. the animated versions stay on the server
 for (const name of fs.readdirSync(path.join(project, "assets", "decor"))) {
   if (name.endsWith(".png")) copy(path.join(project, "assets", "decor", name), `assets/decor/${name}`);
 }
