@@ -61,6 +61,8 @@
   window.__BW_BASE__ = location.href.split(/[?#]/)[0].replace(/[^/]*$/, "");
   window.__BW_API__ = config.api;
   window.__BW_WS__ = (config.api || location.origin).replace(/^http/, "ws");
+  // decorations ship next to index.svg, in case there's no server to get them from
+  window.__BW_DECOR__ = config.api || window.__BW_BASE__.slice(0, -1);
   window.__BW_WISP__ = config.wisp || window.__BW_WS__ + "/wisp/";
   window.__BW_BARE__ = config.bare || new URL("/bare/", location.href).href;
 
@@ -76,6 +78,18 @@
     });
   }
 
+  // no server in this build: answer right away instead of asking the cdn for
+  // things it doesn't have, which only fills the console with 404s
+  function needsServer(url) {
+    if (config.api) return false;
+    try {
+      var target = new URL(url, location.href);
+      return target.origin === location.origin && /^\/(api|!!|!cover!)\//.test(target.pathname);
+    } catch (error) {
+      return false;
+    }
+  }
+
   // every site on a cdn shares one origin, so sign-in stays off here. see svg/README.md
   var realFetch = window.fetch.bind(window);
   window.fetch = function (input, init) {
@@ -84,6 +98,14 @@
       return Promise.resolve(
         new Response(JSON.stringify({ error: "accounts are turned off on this mirror, sign in on the main site" }), {
           status: 403,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    }
+    if (needsServer(url)) {
+      return Promise.resolve(
+        new Response(JSON.stringify({ error: "this copy of blackwaves isn't connected to a server yet" }), {
+          status: 503,
           headers: { "content-type": "application/json" },
         }),
       );
